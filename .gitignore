@@ -1,0 +1,16 @@
+# Build artifacts
+NowPlaying.app/
+*.app/
+
+# Object files
+*.o
+
+# Test artifacts
+TestRunner
+*.test
+
+# Claude Code
+.claude/
+
+# macOS
+.DS_Store
