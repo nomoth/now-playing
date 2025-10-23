@@ -112,8 +112,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func spotifyTerminated(_ notification: Notification) {
         if let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
            app.bundleIdentifier == AppConfig.spotifyBundleID {
-            debugLog("🚨 Spotify terminated - cleaning up")
-            spotifyMonitor?.cleanupTimers()
+            debugLog("🚨 Spotify terminated - stopping monitoring")
+            spotifyMonitor?.stopMonitoring()
             spotifyStateChanged(isPlaying: false, artist: nil, track: nil)
         }
     }
