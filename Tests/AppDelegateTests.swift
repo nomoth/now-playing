@@ -37,29 +37,28 @@ class AppDelegateTests: XCTestCase {
         let result = appDelegate.formatDisplayText(artist: longArtist, track: longTrack)
         
         XCTAssertTrue(result.hasSuffix("..."))
-        XCTAssertTrue(result.contains(" - "))
-        // Should be around 50 chars (maxLength - 3 for "..." + 3 for " - ")
-        XCTAssertLessThanOrEqual(result.count, 53) // Some tolerance for calculation
+        XCTAssertTrue(result.contains("... - "))
+        XCTAssertEqual(result.count, AppConfig.maxDisplayLength)
     }
-    
+
     func testFormatDisplayTextLongArtistShortTrack() {
         let longArtist = "This is a very long artist name that should be truncated"
         let shortTrack = "Short"
         let result = appDelegate.formatDisplayText(artist: longArtist, track: shortTrack)
-        
-        XCTAssertTrue(result.hasSuffix("..."))
-        XCTAssertTrue(result.contains(" - "))
-        XCTAssertTrue(result.contains("Short"))
+
+        // Only the artist is cut, and the track gets the room it doesn't use
+        XCTAssertTrue(result.hasSuffix("... - Short"))
+        XCTAssertEqual(result.count, AppConfig.maxDisplayLength)
     }
-    
+
     func testFormatDisplayTextShortArtistLongTrack() {
         let shortArtist = "Short"
         let longTrack = "This is a very long track title that should be truncated"
         let result = appDelegate.formatDisplayText(artist: shortArtist, track: longTrack)
-        
+
+        XCTAssertTrue(result.hasPrefix("Short - "))
         XCTAssertTrue(result.hasSuffix("..."))
-        XCTAssertTrue(result.contains(" - "))
-        XCTAssertTrue(result.contains("Short"))
+        XCTAssertEqual(result.count, AppConfig.maxDisplayLength)
     }
     
     func testFormatDisplayTextEmptyStrings() {

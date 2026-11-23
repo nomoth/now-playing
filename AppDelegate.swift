@@ -238,17 +238,12 @@ extension AppDelegate: SpotifyMonitorDelegate {
             // Use string builder for minimal allocations
             result = artist + " - " + track
         } else {
-            // Optimized truncation with minimal string operations
-            let ellipsisLength = 3 // "..."
-            let availableLength = maxLength - separatorLength - ellipsisLength
-            let artistLength = min(artist.count, availableLength / 2)
-            let trackLength = availableLength - artistLength
-            
-            // Use substring operations instead of String() constructors
-            let artistEnd = artist.index(artist.startIndex, offsetBy: artistLength)
-            let trackEnd = track.index(track.startIndex, offsetBy: trackLength)
-            
-            result = String(artist[..<artistEnd]) + " - " + String(track[..<trackEnd]) + "..."
+            // Each side gets half of the room left by the separator; a side shorter than
+            // its half leaves the rest to the other one.
+            let availableLength = maxLength - separatorLength
+            let half = availableLength / 2
+            let artistLength = artist.count <= half ? artist.count : max(half, availableLength - track.count)
+            result = truncate(artist, to: artistLength) + " - " + truncate(track, to: availableLength - artistLength)
         }
         
         // Thread-safe cache update
@@ -258,5 +253,13 @@ extension AppDelegate: SpotifyMonitorDelegate {
         }
         
         return result
+    }
+
+    /// Returns `text` unchanged when it fits in `length` characters, otherwise its
+    /// beginning followed by "...", `length` characters in total.
+    private func truncate(_ text: String, to length: Int) -> String {
+        guard text.count > length else { return text }
+        let ellipsis = "..."
+        return String(text.prefix(max(0, length - ellipsis.count))) + ellipsis
     }
 }
