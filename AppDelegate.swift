@@ -7,12 +7,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var spotifyMonitor: SpotifyMonitor!
     private let logger = Logger(subsystem: "com.jf.nowplaying", category: "AppDelegate")
-    
-    // Thread-safe cache for formatted text to avoid repeated allocations
-    private let cacheQueue = DispatchQueue(label: "com.jf.nowplaying.cache", attributes: .concurrent)
-    private var _lastFormattedText: String = ""
-    private var _lastInputHash: Int = 0
-    
+
     // Debug logging function
     private func debugLog(_ message: String) {
         #if DEBUG
@@ -251,44 +246,19 @@ extension AppDelegate: SpotifyMonitorDelegate {
     }
     
     func formatDisplayText(artist: String, track: String) -> String {
-        // Create hash for cache key to avoid string comparison
-        let inputHash = artist.hashValue &* 31 &+ track.hashValue
-        
-        // Thread-safe cache check
-        let cachedResult = cacheQueue.sync {
-            return _lastInputHash == inputHash ? _lastFormattedText : nil
-        }
-        
-        if let cached = cachedResult {
-            return cached
-        }
-        
         let maxLength = AppConfig.maxDisplayLength
-        let result: String
-        
-        // Calculate total length upfront to avoid string interpolation
         let separatorLength = 3 // " - "
-        let totalLength = artist.count + separatorLength + track.count
-        
-        if totalLength <= maxLength {
-            // Use string builder for minimal allocations
-            result = artist + " - " + track
-        } else {
-            // Each side gets half of the room left by the separator; a side shorter than
-            // its half leaves the rest to the other one.
-            let availableLength = maxLength - separatorLength
-            let half = availableLength / 2
-            let artistLength = artist.count <= half ? artist.count : max(half, availableLength - track.count)
-            result = truncate(artist, to: artistLength) + " - " + truncate(track, to: availableLength - artistLength)
+
+        guard artist.count + separatorLength + track.count > maxLength else {
+            return artist + " - " + track
         }
-        
-        // Thread-safe cache update
-        cacheQueue.async(flags: .barrier) {
-            self._lastInputHash = inputHash
-            self._lastFormattedText = result
-        }
-        
-        return result
+
+        // Each side gets half of the room left by the separator; a side shorter than
+        // its half leaves the rest to the other one.
+        let availableLength = maxLength - separatorLength
+        let half = availableLength / 2
+        let artistLength = artist.count <= half ? artist.count : max(half, availableLength - track.count)
+        return truncate(artist, to: artistLength) + " - " + truncate(track, to: availableLength - artistLength)
     }
 
     /// Returns `text` unchanged when it fits in `length` characters, otherwise its
