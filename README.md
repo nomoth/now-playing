@@ -51,6 +51,10 @@ On macOS 26 and later, the ♫ symbol becomes a spectrum analyzer while Spotify 
 
 The Spectrum Style menu switches between two looks: Winamp, green and yellow bars on a black tile, and macOS, bars in the menu bar's text color.
 
+| Winamp | macOS |
+| --- | --- |
+| ![Winamp style: green bars on a black tile, before the artist and track](docs/spectrum-winamp.png) | ![macOS style: white bars on a dark menu bar, before the artist and track](docs/spectrum-macos.png) |
+
 Band count, frequency range, sensitivity and motion are set in `AppConfig.swift`.
 
 ## How the spectrum works
