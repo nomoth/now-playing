@@ -4,10 +4,15 @@ CONTENTS_DIR = $(BUNDLE_DIR)/Contents
 MACOS_DIR = $(CONTENTS_DIR)/MacOS
 RESOURCES_DIR = $(CONTENTS_DIR)/Resources
 
+# Same minimum as LSMinimumSystemVersion in Info.plist. Without an explicit target,
+# swiftc targets the macOS version of the build machine.
+MIN_MACOS = 11.0
+ARCH := $(shell uname -m)
+
 # Compilation flags
 DEBUG_FLAGS = -DDEBUG
 RELEASE_FLAGS = -O
-SWIFTC_FLAGS = $(if $(DEBUG),$(DEBUG_FLAGS),$(RELEASE_FLAGS))
+SWIFTC_FLAGS = -target $(ARCH)-apple-macos$(MIN_MACOS) $(if $(DEBUG),$(DEBUG_FLAGS),$(RELEASE_FLAGS))
 
 all: $(BUNDLE_DIR)
 
