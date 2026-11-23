@@ -7,12 +7,13 @@ A lightweight macOS menu bar application that displays currently playing Spotify
 - Displays artist and track name in the menu bar
 - Visual indicators for playing (♫) and paused (❚❚) states  
 - Auto-start at login option
-- Real-time updates via periodic polling (every second)
+- Updates by polling Spotify through AppleScript: every second while playing, every 3 seconds while paused
 
 ## Requirements
 
 - macOS 11.0+
 - Spotify installed
+- Xcode or the Command Line Tools, to build
 
 ## Installation
 
@@ -38,9 +39,14 @@ macOS ties the permission to control Spotify to the app's code signature. The ap
 
 1. Launch the app - appears as ♫ in menu bar
 2. Grant Spotify automation permission when prompted
-3. Music info updates automatically every second using AppleScript
+3. The menu bar shows the current artist and track
 
-Right-click menu bar icon for auto-start and quit options.
+Click the menu bar item for the Start at Login and Quit options.
+
+## Development
+
+- `make debug` builds with debug logging on stdout: start `NowPlaying.app/Contents/MacOS/NowPlaying` from a terminal to see it
+- `make test` runs the unit tests
 
 ## License
 
