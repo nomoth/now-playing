@@ -55,6 +55,10 @@ final class SpotifyAudioTap {
     private(set) var format = AudioStreamBasicDescription()
     var sampleRate: Double { format.mSampleRate }
 
+    /// Called on the main queue when the capture must restart to follow the audio output: the
+    /// default output device changed, or the tap's sample rate did.
+    var onOutputChange: (() -> Void)?
+
     /// What the audio callback shares with the main thread
     private struct Capture {
         var ring: SampleRing
@@ -68,6 +72,8 @@ final class SpotifyAudioTap {
     private var tapUUID = UUID()
     private var aggregateID = AudioObjectID(kAudioObjectUnknown)
     private var ioProcID: AudioDeviceIOProcID?
+    private var listeners: [(object: AudioObjectID, address: AudioObjectPropertyAddress,
+                             block: AudioObjectPropertyListenerBlock)] = []
 
     init(capacity: Int) {
         capture = OSAllocatedUnfairLock(initialState: Capture(ring: SampleRing(capacity: capacity)))
@@ -85,6 +91,7 @@ final class SpotifyAudioTap {
             try createTap()
             try createAggregateDevice()
             try startIO()
+            try listenForOutputChanges()
         } catch {
             stop()
             throw error
@@ -92,6 +99,11 @@ final class SpotifyAudioTap {
     }
 
     func stop() {
+        for listener in listeners {
+            var address = listener.address
+            AudioObjectRemovePropertyListenerBlock(listener.object, &address, .main, listener.block)
+        }
+        listeners.removeAll()
         if let ioProcID = ioProcID {
             AudioDeviceStop(aggregateID, ioProcID)
             AudioDeviceDestroyIOProcID(aggregateID, ioProcID)
@@ -138,14 +150,44 @@ final class SpotifyAudioTap {
         tapUUID = description.uuid
         try check(AudioHardwareCreateProcessTap(description, &tapID), "create the Spotify audio tap")
 
-        var address = AudioObjectPropertyAddress(mSelector: kAudioTapPropertyFormat,
-                                                 mScope: kAudioObjectPropertyScopeGlobal,
-                                                 mElement: kAudioObjectPropertyElementMain)
-        var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
-        try check(AudioObjectGetPropertyData(tapID, &address, 0, nil, &size, &format), "read the tap format")
+        format = try readFormat()
         guard format.mSampleRate > 0 else {
             throw AudioTapError(step: "get a sample rate from the tap", status: kAudioHardwareUnspecifiedError)
         }
+    }
+
+    private func readFormat() throws -> AudioStreamBasicDescription {
+        var address = AudioObjectPropertyAddress(mSelector: kAudioTapPropertyFormat,
+                                                 mScope: kAudioObjectPropertyScopeGlobal,
+                                                 mElement: kAudioObjectPropertyElementMain)
+        var format = AudioStreamBasicDescription()
+        var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
+        try check(AudioObjectGetPropertyData(tapID, &address, 0, nil, &size, &format), "read the tap format")
+        return format
+    }
+
+    /// Switching the output device can change the sample rate Spotify plays at, which the analyzer
+    /// depends on, or leave the aggregate device without audio: either way the capture must restart.
+    private func listenForOutputChanges() throws {
+        let system = AudioObjectID(kAudioObjectSystemObject)
+        try addListener(to: system, selector: kAudioHardwarePropertyDefaultOutputDevice) { [weak self] in
+            self?.onOutputChange?()
+        }
+        // Only a new sample rate: a notification that changes nothing must not restart the capture again and again
+        try addListener(to: tapID, selector: kAudioTapPropertyFormat) { [weak self] in
+            guard let self = self, (try? self.readFormat())?.mSampleRate != self.sampleRate else { return }
+            self.onOutputChange?()
+        }
+    }
+
+    private func addListener(to object: AudioObjectID, selector: AudioObjectPropertySelector,
+                             _ handler: @escaping () -> Void) throws {
+        var address = AudioObjectPropertyAddress(mSelector: selector,
+                                                 mScope: kAudioObjectPropertyScopeGlobal,
+                                                 mElement: kAudioObjectPropertyElementMain)
+        let block: AudioObjectPropertyListenerBlock = { _, _ in handler() }
+        try check(AudioObjectAddPropertyListenerBlock(object, &address, .main, block), "watch the audio output")
+        listeners.append((object, address, block))
     }
 
     /// The tap only delivers audio through an aggregate device that includes it.

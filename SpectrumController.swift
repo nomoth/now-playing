@@ -68,15 +68,21 @@ final class SpectrumController {
     /// keeps listening, but has nothing to show.
     var hasAudio: Bool { presence.hasAudio }
 
-    /// Called on the main thread when `hasAudio` changes
+    /// Called on the main thread when `hasAudio` changes, or when the spectrum stopped on its own
+    /// because the capture could not restart after an output change
     var onChange: (() -> Void)?
+
+    /// Lets the notifications of one output change arrive before the capture restarts, so it restarts once
+    private static let restartDelay: TimeInterval = 0.5
+    private var restartScheduled = false
+
+    init() {
+        tap.onOutputChange = { [weak self] in self?.scheduleRestart() }
+    }
 
     func start() throws {
         guard !isRunning else { return }
-        try tap.start()
-        let format = tap.format
-        debugLog("🎚️ Capturing Spotify: \(format.mSampleRate) Hz, \(format.mChannelsPerFrame) channel(s), \(format.mBitsPerChannel) bits, flags 0x\(String(format.mFormatFlags, radix: 16))")
-        analyzer = SpectrumAnalyzer(sampleRate: tap.sampleRate, fftSize: Self.fftSize)
+        try startCapture()
         framesSinceReport = 0
         meter = SpectrumMeter()
         presence.start(at: ProcessInfo.processInfo.systemUptime)
@@ -94,6 +100,33 @@ final class SpectrumController {
         timer?.invalidate()
         timer = nil
         tap.stop()
+    }
+
+    /// Starts the tap and fits the analyzer to its sample rate
+    private func startCapture() throws {
+        try tap.start()
+        let format = tap.format
+        debugLog("🎚️ Capturing Spotify: \(format.mSampleRate) Hz, \(format.mChannelsPerFrame) channel(s), \(format.mBitsPerChannel) bits, flags 0x\(String(format.mFormatFlags, radix: 16))")
+        analyzer = SpectrumAnalyzer(sampleRate: tap.sampleRate, fftSize: Self.fftSize)
+    }
+
+    private func scheduleRestart() {
+        guard isRunning, !restartScheduled else { return }
+        restartScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + Self.restartDelay) { [weak self] in
+            guard let self = self else { return }
+            self.restartScheduled = false
+            guard self.isRunning else { return }
+            self.debugLog("🎚️ Audio output changed, restarting the capture")
+            self.tap.stop()
+            do {
+                try self.startCapture()
+            } catch {
+                self.errorLog("❌ Could not restart the capture: \(error)")
+                self.stop()
+                self.onChange?()
+            }
+        }
     }
 
     private func drawFrame() {
@@ -125,6 +158,14 @@ final class SpectrumController {
         print("[SpectrumController] \(message)")
         #else
         logger.debug("\(message)")
+        #endif
+    }
+
+    private func errorLog(_ message: String) {
+        #if DEBUG
+        print("[SpectrumController ERROR] \(message)")
+        #else
+        logger.error("\(message)")
         #endif
     }
 }
