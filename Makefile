@@ -44,13 +44,8 @@ run: $(BUNDLE_DIR)
 	@echo "Launching $(APP_NAME)..."
 	open $(BUNDLE_DIR)
 
-test-notifications:
-	@echo "Testing distributed notifications..."
-	@echo "Launch Spotify and change music to see notifications"
-	swift -e "import Foundation; DistributedNotificationCenter.default().addObserver(forName: NSNotification.Name(\"com.spotify.client.PlaybackStateChanged\"), object: nil, queue: nil) { notification in print(\"Notification:\", notification.userInfo ?? \"pas d'info\") }; RunLoop.main.run()"
-
 test:
 	@echo "Running unit tests..."
 	./run_tests.sh
 
-.PHONY: all clean run test-notifications test debug release
+.PHONY: all clean run test debug release

@@ -24,10 +24,6 @@
     <true/>
     <key>NSAppleEventsUsageDescription</key>
     <string>NowPlaying needs access to Spotify to display currently playing music information.</string>
-    <key>NSAppleScriptEnabled</key>
-    <true/>
-    <key>NSSystemAdministrationUsageDescription</key>
-    <string>NowPlaying needs accessibility access to monitor media key presses and provide real-time music information in the menu bar.</string>
     <key>NSHumanReadableCopyright</key>
     <string>Copyright © 2025. All rights reserved.</string>
     <key>NSPrincipalClass</key>
