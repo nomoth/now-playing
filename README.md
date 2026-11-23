@@ -52,7 +52,8 @@ Band count, frequency range, sensitivity and motion are set in `AppConfig.swift`
 
 ## Development
 
-- `make debug` builds with debug logging on stdout. To see it, run `open --stdout "$(tty)" --stderr "$(tty)" NowPlaying.app`: starting the binary directly would make macOS send permission requests to the terminal instead of NowPlaying
+- `make debug` builds with debug logging on stdout
+- `make dev` builds it and runs it with its log in the terminal until it quits from its menu; Ctrl-C leaves it running. It starts the app through `open`: starting the binary directly would make macOS send permission requests to the terminal instead of NowPlaying
 - `make test` runs the unit tests
 
 ## License

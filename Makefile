@@ -53,8 +53,17 @@ run: $(BUNDLE_DIR)
 	@echo "Launching $(APP_NAME)..."
 	open $(BUNDLE_DIR)
 
+# Runs the debug build with its log in this terminal until the app quits. It starts through open
+# so that macOS asks for permissions on behalf of NowPlaying (a binary started from a shell makes
+# the terminal ask instead), but then Ctrl-C does not reach the app: it only stops the waiting.
+dev:
+	$(MAKE) DEBUG=1 all
+	@out=$$(tty) || out=/dev/null; \
+	echo "Running $(APP_NAME), quit it from its menu"; \
+	open -W --stdout "$$out" --stderr "$$out" $(BUNDLE_DIR)
+
 test:
 	@echo "Running unit tests..."
 	./run_tests.sh
 
-.PHONY: all clean run test debug release
+.PHONY: all clean run dev test debug release
