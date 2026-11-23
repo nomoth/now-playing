@@ -14,6 +14,10 @@ DEBUG_FLAGS = -DDEBUG
 RELEASE_FLAGS = -O
 SWIFTC_FLAGS = -target $(ARCH)-apple-macos$(MIN_MACOS) $(if $(DEBUG),$(DEBUG_FLAGS),$(RELEASE_FLAGS))
 
+# Ad hoc by default. macOS ties the Spotify automation permission to the signature, and an
+# ad hoc signature changes with every build: pass a stable identity to keep it (see README).
+SIGN_IDENTITY ?= -
+
 all: $(BUNDLE_DIR)
 
 debug:
@@ -37,7 +41,7 @@ $(BUNDLE_DIR): clean
 	cp Scripts/spotify_state.applescript $(RESOURCES_DIR)/
 	
 	@echo "Code signing app bundle..."
-	codesign --force --deep --sign - $(BUNDLE_DIR)
+	codesign --force --sign "$(SIGN_IDENTITY)" $(BUNDLE_DIR)
 	
 	
 	@echo "App bundle created and signed: $(BUNDLE_DIR)"
