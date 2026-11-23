@@ -1,11 +1,15 @@
 import AppKit
 import os
 
-/// Runs the spectrum while Spotify plays: captures its audio, analyzes it and hands over one image per frame.
+/// Runs the spectrum while Spotify plays: captures its audio, analyzes it and moves the bars of `view`.
 @available(macOS 26.0, *)
 final class SpectrumController {
     /// 4096 samples cover about 85 ms at 48 kHz, fine enough for the lowest bands
     private static let fftSize = 4096
+
+    /// To place in the status item button
+    let view = SpectrumView(layout: SpectrumLayout(bandCount: AppConfig.spectrumBandCount,
+                                                   height: NSStatusBar.system.thickness - 4))
 
     private let tap = SpotifyAudioTap(capacity: SpectrumController.fftSize)
     private var analyzer: SpectrumAnalyzer?
@@ -13,20 +17,16 @@ final class SpectrumController {
     private var samples = [Float](repeating: 0, count: SpectrumController.fftSize)
     private var timer: Timer?
     private var framesSinceReport = 0
-    private let onFrame: (NSImage) -> Void
     private let logger = Logger(subsystem: "com.jf.nowplaying", category: "SpectrumController")
-
-    /// `onFrame` runs on the main thread.
-    init(onFrame: @escaping (NSImage) -> Void) {
-        self.onFrame = onFrame
-    }
 
     deinit {
         stop()
     }
 
-    /// Applies from the next frame
-    var theme: SpectrumTheme = .winamp
+    var theme: SpectrumTheme {
+        get { view.theme }
+        set { view.theme = newValue }
+    }
 
     var isRunning: Bool { timer != nil }
 
@@ -58,7 +58,7 @@ final class SpectrumController {
         guard let analyzer = analyzer else { return }
         tap.copyLatest(into: &samples)
         meter.update(levels: analyzer.levels(of: samples), at: ProcessInfo.processInfo.systemUptime)
-        onFrame(SpectrumRenderer.image(of: meter, height: NSStatusBar.system.thickness - 4, theme: theme))
+        view.update(bars: meter.bars, peaks: meter.peaks)
         reportActivityEverySecond()
     }
 

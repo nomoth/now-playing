@@ -54,6 +54,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         
         button.title = AppConfig.defaultSymbol
         button.imagePosition = .noImage
+        button.postsFrameChangedNotifications = true
+        NotificationCenter.default.addObserver(self, selector: #selector(placeSpectrumView),
+                                               name: NSView.frameDidChangeNotification, object: button)
         debugLog("📱 Status item button configured")
         
         // Menu with options
@@ -258,32 +261,53 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Starts the spectrum, which then sets the button image on every frame.
+    /// Shows the running spectrum in place of the playing symbol, before `title`.
     /// Returns false where it cannot run, so the caller falls back to the playing symbol.
-    private func startSpectrum() -> Bool {
-        guard #available(macOS 26.0, *) else { return false }
+    private func showSpectrum(title: String) -> Bool {
+        guard #available(macOS 26.0, *), let button = statusItem.button else { return false }
         let controller: SpectrumController
         if let existing = spectrumController as? SpectrumController {
             controller = existing
         } else {
-            controller = SpectrumController { [weak self] image in
-                self?.statusItem.button?.image = image
-            }
+            controller = SpectrumController()
             spectrumController = controller
         }
         controller.theme = spectrumTheme
         do {
             try controller.start()
-            return true
         } catch {
             errorLog("❌ Spectrum unavailable: \(error)")
             return false
         }
+
+        // A blank image of the spectrum's size keeps its room before the title, and the view sits on it
+        let size = controller.view.frame.size
+        if button.image?.size != size {
+            button.image = NSImage(size: size, flipped: false) { _ in true }
+        }
+        button.imagePosition = .imageLeft
+        button.title = title
+        if controller.view.superview !== button {
+            button.addSubview(controller.view)
+        }
+        placeSpectrumView()
+        return true
+    }
+
+    /// Keeps the spectrum view on the blank image, which moves when the button resizes to its title.
+    @objc private func placeSpectrumView() {
+        guard #available(macOS 26.0, *),
+              let button = statusItem.button,
+              let view = (spectrumController as? SpectrumController)?.view,
+              view.superview === button,
+              let imageRect = button.cell?.imageRect(forBounds: button.bounds) else { return }
+        view.setFrameOrigin(imageRect.origin)
     }
 
     private func stopSpectrum() {
         if #available(macOS 26.0, *), let controller = spectrumController as? SpectrumController {
             controller.stop()
+            controller.view.removeFromSuperview()
         }
     }
 }
@@ -297,10 +321,7 @@ extension AppDelegate: SpotifyMonitorDelegate {
                 // Limit length to avoid menu bar overflow
                 let displayText = self.formatDisplayText(artist: artist, track: track)
                 
-                if isPlaying && self.startSpectrum() {
-                    // The spectrum takes the place of the playing symbol
-                    button.title = " \(displayText)"
-                    button.imagePosition = .imageLeft
+                if isPlaying && self.showSpectrum(title: " \(displayText)") {
                     return
                 }
 

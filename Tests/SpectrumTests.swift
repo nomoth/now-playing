@@ -78,6 +78,26 @@ class SpectrumMeterTests: XCTestCase {
     }
 }
 
+class SpectrumLayoutTests: XCTestCase {
+    let layout = SpectrumLayout(bandCount: 18, height: 18)
+
+    func testFullBarAndItsPeakStayInsideTheTile() {
+        let band = layout.band(17, bar: 1, peak: 1)
+        XCTAssertLessThanOrEqual(band.peak.maxY, layout.size.height - SpectrumLayout.padding)
+        XCTAssertLessThanOrEqual(band.peak.maxX, layout.size.width - SpectrumLayout.padding)
+        XCTAssertLessThanOrEqual(band.high.maxY, band.peak.minY)
+    }
+
+    func testOnlyTheTopOfALoudBarTurnsHigh() {
+        XCTAssertEqual(layout.band(0, bar: 0.5, peak: 0.5).high.height, 0)
+
+        let loud = layout.band(0, bar: 1, peak: 1)
+        XCTAssertGreaterThan(loud.high.height, 0)
+        XCTAssertEqual(loud.high.minY, loud.low.maxY)
+        XCTAssertEqual(loud.low.height + loud.high.height, layout.fullHeight, accuracy: 0.5)
+    }
+}
+
 class SampleRingTests: XCTestCase {
     func testKeepsLatestSamplesOldestFirst() {
         var ring = SampleRing(capacity: 4)
