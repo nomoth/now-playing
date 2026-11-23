@@ -184,6 +184,31 @@ class SpotifyMonitorTests: XCTestCase {
         XCTAssertEqual(mockDelegate.lastStateChange?.isPlaying, true)
     }
 
+    // MARK: - Stop/Restart Tests
+
+    func testStopMonitoringForgetsLastTrack() {
+        spotifyMonitor.processResult("paused|Artist|Track|10|180000")
+        spotifyMonitor.stopMonitoring()
+        mockDelegate.reset()
+
+        // Spotify relaunched, paused on the track it was quit on
+        spotifyMonitor.processResult("paused|Artist|Track|10|180000")
+
+        XCTAssertEqual(mockDelegate.lastStateChange?.artist, "Artist")
+        XCTAssertEqual(mockDelegate.lastStateChange?.isPlaying, false)
+    }
+
+    func testResultArrivingWhileNotMonitoringIsIgnored() {
+        // As when Spotify quits while a script is running: monitoring is stopped when the result arrives
+        spotifyMonitor.updateSpotifyState()
+
+        let mainQueueDrained = expectation(description: "main queue drained")
+        DispatchQueue.main.async { mainQueueDrained.fulfill() }
+        wait(for: [mainQueueDrained], timeout: 1)
+
+        XCTAssertNil(mockDelegate.lastStateChange)
+    }
+
     // MARK: - Polling Integration Tests
     
     func testUpdateSpotifyStateCallsScriptManager() {

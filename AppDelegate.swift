@@ -114,7 +114,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
            app.bundleIdentifier == AppConfig.spotifyBundleID {
             debugLog("🚨 Spotify terminated - stopping monitoring")
             spotifyMonitor?.stopMonitoring()
-            spotifyStateChanged(isPlaying: false, artist: nil, track: nil)
+            spotifyNotRunning()
         }
     }
     

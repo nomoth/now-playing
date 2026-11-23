@@ -58,15 +58,14 @@ class SpotifyMonitor {
     }
     
     func stopMonitoring() {
-        guard isMonitoring else { return }
         isMonitoring = false
-        
-        cleanupTimers()
-    }
-    
-    func cleanupTimers() {
         pollingTimer?.invalidate()
         pollingTimer = nil
+
+        // Forget the last track, so the first result after a restart is always shown
+        // even when Spotify comes back on the same track in the same state
+        lastTrackInfo = (nil, nil, false)
+        lastPlayingPosition = nil
     }
     
     private func isSpotifyRunning() -> Bool {
@@ -104,7 +103,9 @@ class SpotifyMonitor {
     func updateSpotifyState() {
         scriptManager.getSpotifyState { [weak self] result in
             DispatchQueue.main.async {
-                self?.processResult(result)
+                // A result still in flight when monitoring stopped would show a track Spotify no longer plays
+                guard let self, self.isMonitoring else { return }
+                self.processResult(result)
             }
         }
     }
