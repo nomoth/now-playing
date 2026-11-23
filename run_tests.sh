@@ -1,13 +1,14 @@
 #!/bin/bash
+set -euo pipefail
 
 echo "🧪 Running NowPlaying Tests..."
 
-# Create a temporary test package
-TEST_DIR="Tests"
-TEMP_PACKAGE_DIR="TestPackage"
+cd "$(dirname "$0")"
 
-# Clean up any previous test runs
+# Temporary SwiftPM package wrapping the sources, removed on exit even when a step fails
+TEMP_PACKAGE_DIR="$PWD/TestPackage"
 rm -rf "$TEMP_PACKAGE_DIR"
+trap 'rm -rf "$TEMP_PACKAGE_DIR"' EXIT
 
 # Create test package structure
 mkdir -p "$TEMP_PACKAGE_DIR/Sources/NowPlaying"
@@ -50,16 +51,9 @@ let package = Package(
 )
 EOF
 
-# Run tests
-cd "$TEMP_PACKAGE_DIR"
-echo "📦 Building test package..."
-swift build
-
-echo "🚀 Running tests..."
-swift test
-
-# Clean up
-cd ..
-rm -rf "$TEMP_PACKAGE_DIR"
+echo "🚀 Building and running tests..."
+# DECISION: SwiftPM runs with --disable-sandbox.
+# The manifest is generated just above, so its sandbox protects nothing, and it cannot nest inside another sandbox (nono, CI).
+swift test --disable-sandbox --package-path "$TEMP_PACKAGE_DIR"
 
 echo "✅ Tests completed!"
