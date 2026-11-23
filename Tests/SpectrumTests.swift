@@ -119,3 +119,44 @@ class SampleRingTests: XCTestCase {
         XCTAssertEqual(latest, [1, 2, 3])
     }
 }
+
+class AudioPresenceTests: XCTestCase {
+    func testOnlySilenceSinceStartHidesTheSpectrumAfterTheDelay() {
+        var presence = AudioPresence(delay: 3)
+        presence.start(at: 10)
+
+        XCTAssertFalse(presence.update(heard: false, at: 12.9))
+        XCTAssertTrue(presence.hasAudio)
+        XCTAssertTrue(presence.update(heard: false, at: 13))
+        XCTAssertFalse(presence.hasAudio)
+    }
+
+    func testFirstSoundBringsTheSpectrumBack() {
+        var presence = AudioPresence(delay: 3)
+        presence.start(at: 0)
+        _ = presence.update(heard: false, at: 3)
+
+        XCTAssertTrue(presence.update(heard: true, at: 5))
+        XCTAssertTrue(presence.hasAudio)
+    }
+
+    func testSilenceAfterASoundKeepsTheSpectrum() {
+        var presence = AudioPresence(delay: 3)
+        presence.start(at: 0)
+        _ = presence.update(heard: true, at: 0.5)
+
+        XCTAssertFalse(presence.update(heard: false, at: 60))
+        XCTAssertTrue(presence.hasAudio)
+    }
+
+    func testStartAfterASilentCaptureWaitsForASound() {
+        var presence = AudioPresence(delay: 3)
+        presence.start(at: 0)
+        _ = presence.update(heard: false, at: 3)
+
+        presence.start(at: 10)
+        XCTAssertFalse(presence.hasAudio)
+        XCTAssertFalse(presence.update(heard: false, at: 10.1))
+        XCTAssertTrue(presence.update(heard: true, at: 10.2))
+    }
+}

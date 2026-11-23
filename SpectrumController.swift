@@ -1,5 +1,38 @@
+import Accelerate
 import AppKit
 import os
+
+/// Whether the capture brings audio worth a spectrum. Only silence since the capture started, as when
+/// audio capture is not allowed, means no audio once `delay` has passed, until the first sound; silence
+/// after a sound does not count, so quiet passages keep the spectrum. A new start keeps the last answer:
+/// after a capture that never heard anything, the next one waits for a sound before showing.
+struct AudioPresence {
+    let delay: TimeInterval
+    private(set) var hasAudio = true
+    private var startedAt: TimeInterval = 0
+    private var heardSinceStart = false
+
+    init(delay: TimeInterval = AppConfig.spectrumSilenceDelay) {
+        self.delay = delay
+    }
+
+    mutating func start(at time: TimeInterval) {
+        startedAt = time
+        heardSinceStart = false
+    }
+
+    /// Takes whether the latest samples hold any sound. Returns true when `hasAudio` changed.
+    mutating func update(heard: Bool, at time: TimeInterval) -> Bool {
+        let hadAudio = hasAudio
+        if heard {
+            heardSinceStart = true
+            hasAudio = true
+        } else if !heardSinceStart && time - startedAt >= delay {
+            hasAudio = false
+        }
+        return hasAudio != hadAudio
+    }
+}
 
 /// Runs the spectrum while Spotify plays: captures its audio, analyzes it and moves the bars of `view`.
 @available(macOS 26.0, *)
@@ -16,6 +49,7 @@ final class SpectrumController {
     private var meter = SpectrumMeter()
     private var samples = [Float](repeating: 0, count: SpectrumController.fftSize)
     private var timer: Timer?
+    private var presence = AudioPresence()
     private var framesSinceReport = 0
     private let logger = Logger(subsystem: "com.jf.nowplaying", category: "SpectrumController")
 
@@ -30,6 +64,13 @@ final class SpectrumController {
 
     var isRunning: Bool { timer != nil }
 
+    /// False while the capture brings only silence since it started (see `AudioPresence`): the spectrum
+    /// keeps listening, but has nothing to show.
+    var hasAudio: Bool { presence.hasAudio }
+
+    /// Called on the main thread when `hasAudio` changes
+    var onChange: (() -> Void)?
+
     func start() throws {
         guard !isRunning else { return }
         try tap.start()
@@ -38,6 +79,7 @@ final class SpectrumController {
         analyzer = SpectrumAnalyzer(sampleRate: tap.sampleRate, fftSize: Self.fftSize)
         framesSinceReport = 0
         meter = SpectrumMeter()
+        presence.start(at: ProcessInfo.processInfo.systemUptime)
 
         // Common modes keep the animation running while the menu is open
         let timer = Timer(timeInterval: 1 / AppConfig.spectrumFrameRate, repeats: true) { [weak self] _ in
@@ -57,9 +99,16 @@ final class SpectrumController {
     private func drawFrame() {
         guard let analyzer = analyzer else { return }
         tap.copyLatest(into: &samples)
-        meter.update(levels: analyzer.levels(of: samples), at: ProcessInfo.processInfo.systemUptime)
-        view.update(bars: meter.bars, peaks: meter.peaks)
+        let now = ProcessInfo.processInfo.systemUptime
         reportActivityEverySecond()
+        if presence.update(heard: vDSP.maximumMagnitude(samples) > 0, at: now) {
+            debugLog(presence.hasAudio ? "🎚️ Sound arrived, showing the spectrum" : "🎚️ Only silence so far, hiding the spectrum")
+            // Later, so the owner never redraws from inside start()
+            DispatchQueue.main.async { [weak self] in self?.onChange?() }
+        }
+        guard presence.hasAudio else { return }
+        meter.update(levels: analyzer.levels(of: samples), at: now)
+        view.update(bars: meter.bars, peaks: meter.peaks)
     }
 
     /// Tells apart no audio at all (callbacks: 0) from silence (peak: 0), e.g. when capture is not allowed.

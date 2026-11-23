@@ -246,12 +246,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Limit length to avoid menu bar overflow
         let displayText = formatDisplayText(artist: state.artist, track: state.track)
-        if state.isPlaying && showSpectrum(title: " \(displayText)") {
+        guard state.isPlaying else {
+            stopSpectrum()
+            showText("\(AppConfig.pausedSymbol) \(displayText)", on: button)
             return
         }
-        stopSpectrum()
-        let icon = state.isPlaying ? AppConfig.playingSymbol : AppConfig.pausedSymbol
-        showText("\(icon) \(displayText)", on: button)
+        if !showSpectrum(title: " \(displayText)") {
+            showText("\(AppConfig.playingSymbol) \(displayText)", on: button)
+        }
     }
 
     private func showText(_ text: String, on button: NSStatusBarButton) {
@@ -336,10 +338,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Shows the running spectrum in place of the playing symbol, before `title`. Returns false where
-    /// it cannot run or while nobody can see the menu bar, so the caller falls back to the playing symbol.
+    /// Shows the running spectrum in place of the playing symbol, before `title`. Returns false where it
+    /// cannot run, while nobody can see the menu bar, or while it only hears silence, so the caller shows
+    /// the playing symbol instead.
     private func showSpectrum(title: String) -> Bool {
-        guard #available(macOS 26.0, *), menuBarHiddenReasons.isEmpty, let button = statusItem.button else {
+        guard #available(macOS 26.0, *), let button = statusItem.button else { return false }
+        guard menuBarHiddenReasons.isEmpty else {
+            stopSpectrum()
             return false
         }
         let controller: SpectrumController
@@ -347,6 +352,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             controller = existing
         } else {
             controller = SpectrumController()
+            controller.onChange = { [weak self] in self?.updateButton() }
             spectrumController = controller
         }
         controller.theme = spectrumTheme
@@ -354,6 +360,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             try controller.start()
         } catch {
             errorLog("❌ Spectrum unavailable: \(error)")
+            stopSpectrum()
+            return false
+        }
+        guard controller.hasAudio else {
+            // It keeps listening behind the playing symbol, and comes back at the first sound
+            controller.view.removeFromSuperview()
             return false
         }
 

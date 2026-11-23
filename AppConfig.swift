@@ -59,6 +59,10 @@ struct AppConfig {
     /// Redraws per second while Spotify plays
     static let spectrumFrameRate: Double = 30
 
+    /// How long the capture may bring only silence after it starts before the playing symbol stands in
+    /// for the spectrum, as when audio capture is not allowed (in seconds)
+    static let spectrumSilenceDelay: TimeInterval = 3
+
     /// Bars rise at once but fall at most this many full heights per second
     static let spectrumFallSpeed: Float = 2.5
 
