@@ -1,3 +1,4 @@
+import Accelerate
 import CoreAudio
 import Foundation
 import os
@@ -51,9 +52,17 @@ struct AudioTapError: Error, CustomStringConvertible {
 // macOS 14.2 taps need Spotify's Core Audio process object looked up first: not worth the code for older systems.
 @available(macOS 26.0, *)
 final class SpotifyAudioTap {
-    private(set) var sampleRate: Double = 48_000
+    private(set) var format = AudioStreamBasicDescription()
+    var sampleRate: Double { format.mSampleRate }
 
-    private let ring: OSAllocatedUnfairLock<SampleRing>
+    /// What the audio callback shares with the main thread
+    private struct Capture {
+        var ring: SampleRing
+        var callbacks = 0
+        var peak: Float = 0
+    }
+
+    private let capture: OSAllocatedUnfairLock<Capture>
     private let ioQueue = DispatchQueue(label: "com.jf.nowplaying.audiotap", qos: .userInteractive)
     private var tapID = AudioObjectID(kAudioObjectUnknown)
     private var tapUUID = UUID()
@@ -61,7 +70,7 @@ final class SpotifyAudioTap {
     private var ioProcID: AudioDeviceIOProcID?
 
     init(capacity: Int) {
-        ring = OSAllocatedUnfairLock(initialState: SampleRing(capacity: capacity))
+        capture = OSAllocatedUnfairLock(initialState: Capture(ring: SampleRing(capacity: capacity)))
     }
 
     deinit {
@@ -96,13 +105,26 @@ final class SpotifyAudioTap {
             AudioHardwareDestroyProcessTap(tapID)
             tapID = AudioObjectID(kAudioObjectUnknown)
         }
-        ring.withLock { $0.clear() }
+        capture.withLock {
+            $0.ring.clear()
+            $0.callbacks = 0
+            $0.peak = 0
+        }
     }
 
     /// Fills `buffer` with the latest samples, oldest first.
     func copyLatest(into buffer: inout [Float]) {
         // Unchecked: the closure runs right away under the lock, so writing to `buffer` is safe
-        ring.withLockUnchecked { $0.copyLatest(into: &buffer) }
+        capture.withLockUnchecked { $0.ring.copyLatest(into: &buffer) }
+    }
+
+    /// Audio callbacks received and loudest sample since the previous call, to tell
+    /// a capture that gets no audio from one that only gets silence.
+    func takeActivity() -> (callbacks: Int, peak: Float) {
+        capture.withLock { capture in
+            defer { capture.callbacks = 0; capture.peak = 0 }
+            return (capture.callbacks, capture.peak)
+        }
     }
 
     // MARK: - Setup
@@ -116,13 +138,14 @@ final class SpotifyAudioTap {
         tapUUID = description.uuid
         try check(AudioHardwareCreateProcessTap(description, &tapID), "create the Spotify audio tap")
 
-        var format = AudioStreamBasicDescription()
         var address = AudioObjectPropertyAddress(mSelector: kAudioTapPropertyFormat,
                                                  mScope: kAudioObjectPropertyScopeGlobal,
                                                  mElement: kAudioObjectPropertyElementMain)
         var size = UInt32(MemoryLayout<AudioStreamBasicDescription>.size)
         try check(AudioObjectGetPropertyData(tapID, &address, 0, nil, &size, &format), "read the tap format")
-        sampleRate = format.mSampleRate
+        guard format.mSampleRate > 0 else {
+            throw AudioTapError(step: "get a sample rate from the tap", status: kAudioHardwareUnspecifiedError)
+        }
     }
 
     /// The tap only delivers audio through an aggregate device that includes it.
@@ -141,14 +164,22 @@ final class SpotifyAudioTap {
     }
 
     private func startIO() throws {
-        let ring = self.ring
+        let capture = self.capture
         try check(AudioDeviceCreateIOProcIDWithBlock(&ioProcID, aggregateID, ioQueue) { _, input, _, _, _ in
             let buffers = UnsafeMutableAudioBufferListPointer(UnsafeMutablePointer(mutating: input))
-            guard let buffer = buffers.first, let data = buffer.mData else { return }
+            guard let buffer = buffers.first, let data = buffer.mData else {
+                capture.withLock { $0.callbacks += 1 }
+                return
+            }
             let channels = max(Int(buffer.mNumberChannels), 1)
             let samples = UnsafeBufferPointer(start: data.assumingMemoryBound(to: Float.self),
                                               count: Int(buffer.mDataByteSize) / MemoryLayout<Float>.size)
-            ring.withLock { $0.append(samples, stride: channels) }
+            let peak = vDSP.maximumMagnitude(samples)
+            capture.withLock {
+                $0.ring.append(samples, stride: channels)
+                $0.callbacks += 1
+                $0.peak = max($0.peak, peak)
+            }
         }, "create the audio callback")
         try check(AudioDeviceStart(aggregateID, ioProcID), "start capturing")
     }
