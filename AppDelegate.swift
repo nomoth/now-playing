@@ -8,6 +8,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var spotifyMonitor: SpotifyMonitor!
     private let logger = Logger(subsystem: "com.jf.nowplaying", category: "AppDelegate")
 
+    /// SpectrumController on macOS 26 and later. Typed AnyObject because a stored
+    /// property cannot be limited to an OS version.
+    private var spectrumController: AnyObject?
+
     // Debug logging function
     private func debugLog(_ message: String) {
         #if DEBUG
@@ -210,6 +214,37 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     
     func applicationWillTerminate(_ aNotification: Notification) {
         spotifyMonitor?.stopMonitoring()
+        stopSpectrum()
+    }
+
+    // MARK: - Spectrum
+
+    /// Starts the spectrum, which then sets the button image on every frame.
+    /// Returns false where it cannot run, so the caller falls back to the playing symbol.
+    private func startSpectrum() -> Bool {
+        guard #available(macOS 26.0, *) else { return false }
+        let controller: SpectrumController
+        if let existing = spectrumController as? SpectrumController {
+            controller = existing
+        } else {
+            controller = SpectrumController { [weak self] image in
+                self?.statusItem.button?.image = image
+            }
+            spectrumController = controller
+        }
+        do {
+            try controller.start()
+            return true
+        } catch {
+            errorLog("❌ Spectrum unavailable: \(error)")
+            return false
+        }
+    }
+
+    private func stopSpectrum() {
+        if #available(macOS 26.0, *), let controller = spectrumController as? SpectrumController {
+            controller.stop()
+        }
     }
 }
 
@@ -222,23 +257,33 @@ extension AppDelegate: SpotifyMonitorDelegate {
                 // Limit length to avoid menu bar overflow
                 let displayText = self.formatDisplayText(artist: artist, track: track)
                 
+                if isPlaying && self.startSpectrum() {
+                    // The spectrum takes the place of the playing symbol
+                    button.title = " \(displayText)"
+                    button.imagePosition = .imageLeft
+                    return
+                }
+
                 // Create text with integrated icon
+                self.stopSpectrum()
                 let icon = isPlaying ? AppConfig.playingSymbol : AppConfig.pausedSymbol
                 button.title = "\(icon) \(displayText)"
                 button.image = nil
                 button.imagePosition = .noImage
             } else {
+                self.stopSpectrum()
                 button.title = AppConfig.defaultSymbol
                 button.image = nil
                 button.imagePosition = .noImage
             }
         }
     }
-    
+
     func spotifyNotRunning() {
         DispatchQueue.main.async { [weak self] in
             guard let self = self, let button = self.statusItem.button else { return }
-            
+
+            self.stopSpectrum()
             button.title = AppConfig.defaultSymbol
             button.image = nil
             button.imagePosition = .noImage

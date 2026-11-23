@@ -39,4 +39,27 @@ struct AppConfig {
     
     /// Default symbol when no music or app not available
     static let defaultSymbol = "♫"
+
+    // MARK: - Spectrum Analyzer (macOS 26+, replaces the playing symbol)
+
+    /// Number of bars
+    static let spectrumBandCount = 18
+
+    /// Frequency range shown, split into bands on a logarithmic scale (in Hz)
+    static let spectrumMinFrequency: Float = 50
+    static let spectrumMaxFrequency: Float = 16_000
+
+    /// Band power shown as an empty bar and as a full bar (in dB relative to full scale)
+    static let spectrumFloorDB: Float = -60
+    static let spectrumCeilingDB: Float = -10
+
+    /// Redraws per second while Spotify plays
+    static let spectrumFrameRate: Double = 30
+
+    /// Bars rise at once but fall at most this many full heights per second
+    static let spectrumFallSpeed: Float = 2.5
+
+    /// Peak marks stay up this long (in seconds), then fall this many full heights per second
+    static let spectrumPeakHold: TimeInterval = 0.6
+    static let spectrumPeakFallSpeed: Float = 0.6
 }

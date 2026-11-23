@@ -6,6 +6,7 @@ A lightweight macOS menu bar application that displays currently playing Spotify
 
 - Displays artist and track name in the menu bar
 - Visual indicators for playing (♫) and paused (❚❚) states  
+- On macOS 26+, a spectrum analyzer of Spotify's audio in place of ♫ while playing
 - Auto-start at login option
 - Updates by polling Spotify through AppleScript: every second while playing, every 3 seconds while paused
 
@@ -42,6 +43,12 @@ macOS ties the permission to control Spotify to the app's code signature. The ap
 3. The menu bar shows the current artist and track
 
 Click the menu bar item for the Start at Login and Quit options.
+
+### Spectrum analyzer
+
+On macOS 26 and later, the ♫ symbol becomes a spectrum analyzer while Spotify plays. It captures Spotify's audio through Core Audio, so macOS asks once for permission to capture other apps' audio; nothing is recorded or stored. If the bars stay flat while music plays, check that NowPlaying is allowed in System Settings > Privacy & Security > Screen & System Audio Recording.
+
+Band count, frequency range, sensitivity and motion are set in `AppConfig.swift`.
 
 ## Development
 
