@@ -12,8 +12,9 @@ class SpotifyMonitor {
     private var isMonitoring = false
     private var pollingTimer: Timer?
     private var lastTrackInfo: (artist: String?, track: String?, isPlaying: Bool) = (nil, nil, false)
-    private var lastPosition: Int = -1
-    private var positionCheckTime: Date = Date()
+    /// Last position seen while Spotify reported "playing", nil after any other report
+    private var lastPlayingPosition: Int?
+    private var positionMovedAt = Date()
     private var currentPollingInterval: TimeInterval = AppConfig.playingPollingInterval
     private let logger = Logger(subsystem: "com.jf.nowplaying", category: "SpotifyMonitor")
     
@@ -108,7 +109,7 @@ class SpotifyMonitor {
         }
     }
     
-    func processResult(_ result: String) {
+    func processResult(_ result: String, now: Date = Date()) {
         if result == "not_running" || result == "error" {
             handleSpotifyNotRunning()
             return
@@ -123,24 +124,8 @@ class SpotifyMonitor {
         let position = Int(components[3]) ?? 0 // in seconds
         let duration = Int(components[4]) ?? 0 // in milliseconds
         
-        // Detect actual playing state by checking if position changed
-        let now = Date()
-        let timeDiff = now.timeIntervalSince(positionCheckTime)
-        let isActuallyPlaying: Bool
-        
-        if timeDiff >= 2.0 { // Check position change over 2+ seconds
-            if position == lastPosition && reportedPlaying {
-                isActuallyPlaying = false // Position didn't change - probably paused
-                debugLog("🎵 Position unchanged (\(position)s) - detecting as PAUSED despite Spotify reporting 'playing'")
-            } else {
-                isActuallyPlaying = reportedPlaying
-            }
-            lastPosition = position
-            positionCheckTime = now
-        } else {
-            isActuallyPlaying = lastTrackInfo.isPlaying // Keep previous state until we have enough data
-        }
-        
+        let isActuallyPlaying = detectPlaying(reportedPlaying: reportedPlaying, position: position, now: now)
+
         debugLog("🎵 Track info - position: \(position)s, duration: \(duration)ms, reported: \(reportedPlaying), actual: \(isActuallyPlaying)")
         
         // Only notify if something changed
@@ -153,6 +138,26 @@ class SpotifyMonitor {
         }
     }
     
+    /// Spotify can report "playing" while the position stays still: that counts as paused once
+    /// the position has not moved for `AppConfig.stalledPositionDelay`. Every other report is
+    /// trusted as is, so play and pause show up on the next poll.
+    private func detectPlaying(reportedPlaying: Bool, position: Int, now: Date) -> Bool {
+        guard reportedPlaying else {
+            lastPlayingPosition = nil
+            return false
+        }
+        if position != lastPlayingPosition {
+            lastPlayingPosition = position
+            positionMovedAt = now
+            return true
+        }
+        let stalled = now.timeIntervalSince(positionMovedAt) >= AppConfig.stalledPositionDelay
+        if stalled {
+            debugLog("🎵 Position unchanged (\(position)s) - detecting as PAUSED despite Spotify reporting 'playing'")
+        }
+        return !stalled
+    }
+
     private func adjustPollingInterval(isPlaying: Bool) {
         let newInterval: TimeInterval = isPlaying ? AppConfig.playingPollingInterval : AppConfig.pausedPollingInterval
         

@@ -18,6 +18,9 @@ struct AppConfig {
     /// Polling interval when Spotify is paused (in seconds)
     static let pausedPollingInterval: TimeInterval = 3.0
     
+    /// How long the position must stay still while Spotify reports "playing" to count as paused (in seconds)
+    static let stalledPositionDelay: TimeInterval = 2.0
+
     /// Timeout for AppleScript execution (in seconds)
     static let appleScriptTimeout: TimeInterval = 3.0
     

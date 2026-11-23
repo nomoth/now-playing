@@ -43,7 +43,7 @@ class SpotifyMonitorTests: XCTestCase {
     // MARK: - processResult Tests
     
     func testProcessResultValidPlaying() {
-        let result = "playing|The Beatles|Hey Jude|60000|240000"
+        let result = "playing|The Beatles|Hey Jude|60|240000"
         
         spotifyMonitor.processResult(result)
         
@@ -55,7 +55,7 @@ class SpotifyMonitorTests: XCTestCase {
     }
     
     func testProcessResultValidPaused() {
-        let result = "paused|The Beatles|Hey Jude|60000|240000"
+        let result = "paused|The Beatles|Hey Jude|60|240000"
         
         spotifyMonitor.processResult(result)
         
@@ -131,7 +131,7 @@ class SpotifyMonitorTests: XCTestCase {
         mockDelegate.reset()
         
         // Send same state again
-        spotifyMonitor.processResult("playing|Artist|Track|30000|180000")
+        spotifyMonitor.processResult("playing|Artist|Track|30|180000")
         
         // Should not notify because artist, track, and playing state are the same
         XCTAssertNil(mockDelegate.lastStateChange)
@@ -144,13 +144,46 @@ class SpotifyMonitorTests: XCTestCase {
         mockDelegate.reset()
         
         // Change playing state
-        spotifyMonitor.processResult("paused|Artist|Track|30000|180000")
+        spotifyMonitor.processResult("paused|Artist|Track|30|180000")
         
         // Should notify because playing state changed
         XCTAssertNotNil(mockDelegate.lastStateChange)
         XCTAssertEqual(mockDelegate.lastStateChange?.isPlaying, false)
     }
     
+    // MARK: - Stalled Position Detection Tests
+
+    func testReportedPlayingWithStillPositionBecomesPaused() {
+        let start = Date()
+        spotifyMonitor.processResult("playing|Artist|Track|10|180000", now: start)
+        XCTAssertEqual(mockDelegate.lastStateChange?.isPlaying, true)
+        mockDelegate.reset()
+
+        // Same position just before the delay: still trusted as playing
+        spotifyMonitor.processResult("playing|Artist|Track|10|180000", now: start + AppConfig.stalledPositionDelay - 0.5)
+        XCTAssertNil(mockDelegate.lastStateChange)
+
+        spotifyMonitor.processResult("playing|Artist|Track|10|180000", now: start + AppConfig.stalledPositionDelay)
+        XCTAssertEqual(mockDelegate.lastStateChange?.isPlaying, false)
+    }
+
+    func testResumeAfterPauseIsPlayingBeforePositionMoves() {
+        let start = Date()
+        spotifyMonitor.processResult("playing|Artist|Track|10|180000", now: start)
+        spotifyMonitor.processResult("paused|Artist|Track|10|180000", now: start + 1)
+        XCTAssertEqual(mockDelegate.lastStateChange?.isPlaying, false)
+
+        // Paused polling is slower than the stall delay: the time spent paused must not count
+        spotifyMonitor.processResult("playing|Artist|Track|10|180000", now: start + 1 + AppConfig.pausedPollingInterval)
+        XCTAssertEqual(mockDelegate.lastStateChange?.isPlaying, true)
+    }
+
+    func testPlayingIsShownOnFirstPoll() {
+        let start = Date()
+        spotifyMonitor.processResult("playing|Artist|Track|10|180000", now: start + 0.1)
+        XCTAssertEqual(mockDelegate.lastStateChange?.isPlaying, true)
+    }
+
     // MARK: - Polling Integration Tests
     
     func testUpdateSpotifyStateCallsScriptManager() {
