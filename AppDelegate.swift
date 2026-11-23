@@ -5,6 +5,8 @@ import os
 
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
+    private let autoStartItem = NSMenuItem(title: "Start at Login", action: #selector(AppDelegate.toggleAutoStart),
+                                           keyEquivalent: "")
     private var spotifyMonitor: SpotifyMonitor!
     /// The delayed start after Spotify launches. Cancelled if Spotify quits first, since nothing else
     /// would stop polling a Spotify that is gone.
@@ -65,9 +67,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Menu with options
         let menu = NSMenu()
         
-        // Auto-start option
-        let autoStartItem = NSMenuItem(title: "Start at Login", action: #selector(toggleAutoStart), keyEquivalent: "")
-        autoStartItem.state = isAutoStartEnabled() ? .on : .off
+        // Auto-start option, its checkmark set each time the menu opens
+        menu.delegate = self
         menu.addItem(autoStartItem)
 
         // The spectrum only runs on macOS 26 and later
@@ -153,9 +154,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             UserDefaults.standard.set(true, forKey: "autoStartEnabled")
             showManualInstructions(enable: true)
         }
-
-        // Update the menu
-        updateAutoStartMenuItem()
     }
 
     @available(macOS 13.0, *)
@@ -224,13 +222,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             // For older versions, use UserDefaults as fallback
             return UserDefaults.standard.bool(forKey: "autoStartEnabled")
-        }
-    }
-    
-    private func updateAutoStartMenuItem() {
-        if let menu = statusItem.menu,
-           let autoStartItem = menu.item(at: 0) {
-            autoStartItem.state = isAutoStartEnabled() ? .on : .off
         }
     }
     
@@ -323,6 +314,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             controller.stop()
             controller.view.removeFromSuperview()
         }
+    }
+}
+
+extension AppDelegate: NSMenuDelegate {
+    /// Reads the login item's state each time the menu opens, not only after a click: the user
+    /// approves or removes it in System Settings, and a stale checkmark would make the next click
+    /// do the opposite of what it shows.
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        autoStartItem.state = isAutoStartEnabled() ? .on : .off
     }
 }
 
