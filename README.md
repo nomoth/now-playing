@@ -1,25 +1,26 @@
 # NowPlaying
 
-A lightweight macOS menu bar application that displays currently playing Spotify track information.
+A macOS menu bar app that shows the artist and track Spotify is playing.
 
 ## Features
 
-- Displays artist and track name in the menu bar
-- Visual indicators for playing (♫) and paused (❚❚) states  
-- On macOS 26+, a spectrum analyzer of Spotify's audio in place of ♫ while playing
-- Auto-start at login option
-- Updates by polling Spotify through AppleScript: every second while playing, every 3 seconds while paused
+- Artist and track in the menu bar, after ♫ while playing and ❚❚ while paused
+- On macOS 26 and later, a spectrum analyzer of Spotify's audio in place of ♫ while playing
+- Start at Login option
+- Spotify is polled through AppleScript: every second while playing, every 3 seconds while paused
+
+It only works with Spotify, and has no playback controls.
 
 ## Requirements
 
-- macOS 11.0+
+- macOS 11.0+, or macOS 26+ for the spectrum analyzer
 - Spotify installed
 - Xcode or the Command Line Tools, to build
 
 ## Installation
 
 ```bash
-git clone https://github.com/yourusername/now-playing.git
+git clone https://github.com/nomoth/now-playing.git
 cd now-playing
 make run
 ```
@@ -42,7 +43,7 @@ macOS ties the permission to control Spotify to the app's code signature. The ap
 2. Grant Spotify automation permission when prompted
 3. The menu bar shows the current artist and track
 
-Click the menu bar item for the Start at Login and Quit options.
+Click the menu bar item for the Start at Login, Spectrum Style (macOS 26+) and Quit options.
 
 ### Spectrum analyzer
 
