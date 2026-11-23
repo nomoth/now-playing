@@ -1,12 +1,14 @@
+-- Checked here rather than through System Events, which needs an Automation permission of its own.
+-- A command sent to a Spotify that quit since this check would relaunch it: keep the check right before them.
+if not (application "Spotify" is running) then return "not_running"
+
+-- ASCII unit separator: unlike "|", it does not appear in artist or track names.
+-- Must match SpotifyMonitor.fieldSeparator.
+set fieldSeparator to character id 31
+
 try
 	-- Each command to Spotify must answer within this delay, otherwise the script returns "timeout"
 	with timeout of 3 seconds
-		tell application "System Events"
-			if not (exists process "Spotify") then
-				return "not_running"
-			end if
-		end tell
-
 		tell application "Spotify"
 			set currentState to player state
 			set currentArtist to artist of current track as string
@@ -24,10 +26,10 @@ try
 			else
 				set stateString to "unknown"
 			end if
-
-			return stateString & "|" & currentArtist & "|" & currentTrack & "|" & currentPosition & "|" & trackDuration & "|" & (currentState as string)
 		end tell
 	end timeout
+
+	return stateString & fieldSeparator & currentArtist & fieldSeparator & currentTrack & fieldSeparator & currentPosition & fieldSeparator & trackDuration
 on error number errorNumber
 	-- errAETimeout: Spotify is busy, which says nothing about what it plays
 	if errorNumber is -1712 then return "timeout"

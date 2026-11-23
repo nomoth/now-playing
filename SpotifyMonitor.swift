@@ -8,6 +8,10 @@ protocol SpotifyMonitorDelegate: AnyObject {
 }
 
 class SpotifyMonitor {
+    /// Separates the fields of the script's output (ASCII unit separator, absent from artist and
+    /// track names). Must match `fieldSeparator` in spotify_state.applescript.
+    static let fieldSeparator = "\u{1F}"
+
     weak var delegate: SpotifyMonitorDelegate?
     private var isMonitoring = false
     private var pollingTimer: Timer?
@@ -119,7 +123,7 @@ class SpotifyMonitor {
             return
         }
         
-        let components = result.components(separatedBy: "|")
+        let components = result.components(separatedBy: Self.fieldSeparator)
         guard components.count >= 5 else { return }
         
         let reportedPlaying = components[0] == "playing"

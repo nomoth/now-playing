@@ -43,7 +43,7 @@ class SpotifyMonitorTests: XCTestCase {
     // MARK: - processResult Tests
     
     func testProcessResultValidPlaying() {
-        let result = "playing|The Beatles|Hey Jude|60|240000"
+        let result = scriptOutput("playing", "The Beatles", "Hey Jude", "60", "240000")
         
         spotifyMonitor.processResult(result)
         
@@ -55,7 +55,7 @@ class SpotifyMonitorTests: XCTestCase {
     }
     
     func testProcessResultValidPaused() {
-        let result = "paused|The Beatles|Hey Jude|60|240000"
+        let result = scriptOutput("paused", "The Beatles", "Hey Jude", "60", "240000")
         
         spotifyMonitor.processResult(result)
         
@@ -68,7 +68,7 @@ class SpotifyMonitorTests: XCTestCase {
     
     func testProcessResultNotRunning() {
         // First set some initial state
-        spotifyMonitor.processResult("playing|Artist|Track|0|180000")
+        spotifyMonitor.processResult(scriptOutput("playing", "Artist", "Track", "0", "180000"))
         mockDelegate.reset()
         
         spotifyMonitor.processResult("not_running")
@@ -79,7 +79,7 @@ class SpotifyMonitorTests: XCTestCase {
     
     func testProcessResultError() {
         // First set some initial state
-        spotifyMonitor.processResult("playing|Artist|Track|0|180000")
+        spotifyMonitor.processResult(scriptOutput("playing", "Artist", "Track", "0", "180000"))
         mockDelegate.reset()
         
         spotifyMonitor.processResult("error")
@@ -89,7 +89,7 @@ class SpotifyMonitorTests: XCTestCase {
     }
     
     func testProcessResultInvalidFormatTooFewComponents() {
-        let result = "playing|Artist|Track"  // Only 3 components instead of 5
+        let result = scriptOutput("playing", "Artist", "Track")  // Only 3 components instead of 5
         
         spotifyMonitor.processResult(result)
         
@@ -99,10 +99,10 @@ class SpotifyMonitorTests: XCTestCase {
     
     func testProcessResultEmptyComponents() {
         // Set an initial non-empty state first
-        spotifyMonitor.processResult("playing|Artist|Track|0|180000")
+        spotifyMonitor.processResult(scriptOutput("playing", "Artist", "Track", "0", "180000"))
         mockDelegate.reset()
         
-        let result = "|||||"  // Empty components
+        let result = scriptOutput("", "", "", "", "", "")  // Empty components
         
         spotifyMonitor.processResult(result)
         
@@ -114,7 +114,7 @@ class SpotifyMonitorTests: XCTestCase {
     }
     
     func testProcessResultNonNumericPositionAndDuration() {
-        let result = "playing|Artist|Track|invalid|also_invalid"
+        let result = scriptOutput("playing", "Artist", "Track", "invalid", "also_invalid")
         
         spotifyMonitor.processResult(result)
         
@@ -124,14 +124,32 @@ class SpotifyMonitorTests: XCTestCase {
         XCTAssertEqual(mockDelegate.lastStateChange?.track, "Track")
         // Should handle gracefully with default values (0)
     }
-    
+
+    func testProcessResultNamesWithPipes() {
+        spotifyMonitor.processResult(scriptOutput("playing", "Artist | Band", "Song | Live", "10", "180000"))
+
+        XCTAssertEqual(mockDelegate.lastStateChange?.artist, "Artist | Band")
+        XCTAssertEqual(mockDelegate.lastStateChange?.track, "Song | Live")
+        XCTAssertEqual(mockDelegate.lastStateChange?.isPlaying, true)
+    }
+
+    func testProcessResultTimeoutKeepsCurrentState() {
+        spotifyMonitor.processResult(scriptOutput("playing", "Artist", "Track", "10", "180000"))
+        mockDelegate.reset()
+
+        spotifyMonitor.processResult("timeout")
+
+        XCTAssertNil(mockDelegate.lastStateChange)
+        XCTAssertFalse(mockDelegate.spotifyNotRunningCalled)
+    }
+
     func testProcessResultNoChangeDoesNotNotify() {
         // Set initial state
-        spotifyMonitor.processResult("playing|Artist|Track|0|180000")
+        spotifyMonitor.processResult(scriptOutput("playing", "Artist", "Track", "0", "180000"))
         mockDelegate.reset()
         
         // Send same state again
-        spotifyMonitor.processResult("playing|Artist|Track|30|180000")
+        spotifyMonitor.processResult(scriptOutput("playing", "Artist", "Track", "30", "180000"))
         
         // Should not notify because artist, track, and playing state are the same
         XCTAssertNil(mockDelegate.lastStateChange)
@@ -140,11 +158,11 @@ class SpotifyMonitorTests: XCTestCase {
     
     func testProcessResultStateChangeNotifies() {
         // Set initial state
-        spotifyMonitor.processResult("playing|Artist|Track|0|180000")
+        spotifyMonitor.processResult(scriptOutput("playing", "Artist", "Track", "0", "180000"))
         mockDelegate.reset()
         
         // Change playing state
-        spotifyMonitor.processResult("paused|Artist|Track|30|180000")
+        spotifyMonitor.processResult(scriptOutput("paused", "Artist", "Track", "30", "180000"))
         
         // Should notify because playing state changed
         XCTAssertNotNil(mockDelegate.lastStateChange)
@@ -155,44 +173,44 @@ class SpotifyMonitorTests: XCTestCase {
 
     func testReportedPlayingWithStillPositionBecomesPaused() {
         let start = Date()
-        spotifyMonitor.processResult("playing|Artist|Track|10|180000", now: start)
+        spotifyMonitor.processResult(scriptOutput("playing", "Artist", "Track", "10", "180000"), now: start)
         XCTAssertEqual(mockDelegate.lastStateChange?.isPlaying, true)
         mockDelegate.reset()
 
         // Same position just before the delay: still trusted as playing
-        spotifyMonitor.processResult("playing|Artist|Track|10|180000", now: start + AppConfig.stalledPositionDelay - 0.5)
+        spotifyMonitor.processResult(scriptOutput("playing", "Artist", "Track", "10", "180000"), now: start + AppConfig.stalledPositionDelay - 0.5)
         XCTAssertNil(mockDelegate.lastStateChange)
 
-        spotifyMonitor.processResult("playing|Artist|Track|10|180000", now: start + AppConfig.stalledPositionDelay)
+        spotifyMonitor.processResult(scriptOutput("playing", "Artist", "Track", "10", "180000"), now: start + AppConfig.stalledPositionDelay)
         XCTAssertEqual(mockDelegate.lastStateChange?.isPlaying, false)
     }
 
     func testResumeAfterPauseIsPlayingBeforePositionMoves() {
         let start = Date()
-        spotifyMonitor.processResult("playing|Artist|Track|10|180000", now: start)
-        spotifyMonitor.processResult("paused|Artist|Track|10|180000", now: start + 1)
+        spotifyMonitor.processResult(scriptOutput("playing", "Artist", "Track", "10", "180000"), now: start)
+        spotifyMonitor.processResult(scriptOutput("paused", "Artist", "Track", "10", "180000"), now: start + 1)
         XCTAssertEqual(mockDelegate.lastStateChange?.isPlaying, false)
 
         // Paused polling is slower than the stall delay: the time spent paused must not count
-        spotifyMonitor.processResult("playing|Artist|Track|10|180000", now: start + 1 + AppConfig.pausedPollingInterval)
+        spotifyMonitor.processResult(scriptOutput("playing", "Artist", "Track", "10", "180000"), now: start + 1 + AppConfig.pausedPollingInterval)
         XCTAssertEqual(mockDelegate.lastStateChange?.isPlaying, true)
     }
 
     func testPlayingIsShownOnFirstPoll() {
         let start = Date()
-        spotifyMonitor.processResult("playing|Artist|Track|10|180000", now: start + 0.1)
+        spotifyMonitor.processResult(scriptOutput("playing", "Artist", "Track", "10", "180000"), now: start + 0.1)
         XCTAssertEqual(mockDelegate.lastStateChange?.isPlaying, true)
     }
 
     // MARK: - Stop/Restart Tests
 
     func testStopMonitoringForgetsLastTrack() {
-        spotifyMonitor.processResult("paused|Artist|Track|10|180000")
+        spotifyMonitor.processResult(scriptOutput("paused", "Artist", "Track", "10", "180000"))
         spotifyMonitor.stopMonitoring()
         mockDelegate.reset()
 
         // Spotify relaunched, paused on the track it was quit on
-        spotifyMonitor.processResult("paused|Artist|Track|10|180000")
+        spotifyMonitor.processResult(scriptOutput("paused", "Artist", "Track", "10", "180000"))
 
         XCTAssertEqual(mockDelegate.lastStateChange?.artist, "Artist")
         XCTAssertEqual(mockDelegate.lastStateChange?.isPlaying, false)
