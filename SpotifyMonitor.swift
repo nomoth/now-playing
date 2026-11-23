@@ -101,18 +101,21 @@ class SpotifyMonitor {
     
     
     func updateSpotifyState() {
+        // The completion runs on the main thread
         scriptManager.getSpotifyState { [weak self] result in
-            DispatchQueue.main.async {
-                // A result still in flight when monitoring stopped would show a track Spotify no longer plays
-                guard let self, self.isMonitoring else { return }
-                self.processResult(result)
-            }
+            // A result still in flight when monitoring stopped would show a track Spotify no longer plays
+            guard let self, self.isMonitoring else { return }
+            self.processResult(result)
         }
     }
-    
+
     func processResult(_ result: String, now: Date = Date()) {
         if result == "not_running" || result == "error" {
             handleSpotifyNotRunning()
+            return
+        }
+        if result == "timeout" {
+            debugLog("⏱️ Spotify did not answer in time, keeping the current display")
             return
         }
         

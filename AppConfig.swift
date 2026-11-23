@@ -21,9 +21,6 @@ struct AppConfig {
     /// How long the position must stay still while Spotify reports "playing" to count as paused (in seconds)
     static let stalledPositionDelay: TimeInterval = 2.0
 
-    /// Timeout for AppleScript execution (in seconds)
-    static let appleScriptTimeout: TimeInterval = 3.0
-    
     // MARK: - Bundle Configuration
     
     /// Spotify bundle identifier
