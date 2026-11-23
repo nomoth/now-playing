@@ -9,6 +9,10 @@ RESOURCES_DIR = $(CONTENTS_DIR)/Resources
 MIN_MACOS = 11.0
 ARCH := $(shell uname -m)
 
+# DECISION: debug builds get their own bundle ID and name, apart from the installed app.
+# macOS relaunches an app by bundle ID (Quit & Reopen after a permission change), which could open the installed copy.
+DEBUG_BUNDLE_ID = com.jf.nowplaying.debug
+
 # Compilation flags
 DEBUG_FLAGS = -DDEBUG
 RELEASE_FLAGS = -O
@@ -36,7 +40,11 @@ $(BUNDLE_DIR): clean
 	
 	@echo "Copying Info.plist..."
 	cp Info.plist $(CONTENTS_DIR)/
-	
+ifdef DEBUG
+	plutil -replace CFBundleIdentifier -string $(DEBUG_BUNDLE_ID) $(CONTENTS_DIR)/Info.plist
+	plutil -replace CFBundleName -string "$(APP_NAME) Debug" $(CONTENTS_DIR)/Info.plist
+endif
+
 	@echo "Copying AppleScript files..."
 	cp Scripts/spotify_state.applescript $(RESOURCES_DIR)/
 	

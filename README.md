@@ -54,7 +54,7 @@ Band count, frequency range, sensitivity and motion are set in `AppConfig.swift`
 
 ## Development
 
-- `make debug` builds with debug logging on stdout
+- `make debug` builds with debug logging on stdout. This build is named NowPlaying Debug, with the bundle ID `com.jf.nowplaying.debug`: macOS keeps its permissions apart from the installed app's, and reopens this build, not the installed one, after a permission change
 - `make dev` builds it and runs it with its log in the terminal until it quits from its menu; Ctrl-C leaves it running. It starts the app through `open`: starting the binary directly would make macOS send permission requests to the terminal instead of NowPlaying
 - `make test` runs the unit tests
 
