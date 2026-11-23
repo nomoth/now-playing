@@ -15,7 +15,11 @@ mkdir -p "$TEMP_PACKAGE_DIR/Sources/NowPlaying"
 mkdir -p "$TEMP_PACKAGE_DIR/Tests/NowPlayingTests"
 
 # Copy source files (excluding main.swift since it makes it an executable)
-cp AppDelegate.swift SpotifyMonitor.swift AppleScriptManager.swift AppConfig.swift "$TEMP_PACKAGE_DIR/Sources/NowPlaying/"
+for source in *.swift; do
+    if [ "$source" != main.swift ]; then
+        cp "$source" "$TEMP_PACKAGE_DIR/Sources/NowPlaying/"
+    fi
+done
 
 # Copy test files
 cp Tests/*.swift "$TEMP_PACKAGE_DIR/Tests/NowPlayingTests/"

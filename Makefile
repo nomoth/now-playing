@@ -32,7 +32,7 @@ $(BUNDLE_DIR): clean
 	mkdir -p $(RESOURCES_DIR)
 	
 	@echo "Compiling Swift sources$(if $(DEBUG), (DEBUG mode),)..."
-	swiftc $(SWIFTC_FLAGS) -o $(MACOS_DIR)/$(APP_NAME) main.swift AppDelegate.swift SpotifyMonitor.swift AppleScriptManager.swift AppConfig.swift
+	swiftc $(SWIFTC_FLAGS) -o $(MACOS_DIR)/$(APP_NAME) $(wildcard *.swift)
 	
 	@echo "Copying Info.plist..."
 	cp Info.plist $(CONTENTS_DIR)/
