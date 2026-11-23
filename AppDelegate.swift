@@ -123,28 +123,64 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     @objc private func toggleAutoStart() {
-        if isAutoStartEnabled() {
-            // Disable auto-start
-            if #available(macOS 13.0, *) {
-                try? SMAppService.mainApp.unregister()
-            } else {
-                UserDefaults.standard.set(false, forKey: "autoStartEnabled")
-                showManualInstructions(enable: false)
-            }
+        if #available(macOS 13.0, *) {
+            toggleLoginItem(SMAppService.mainApp)
+        } else if isAutoStartEnabled() {
+            UserDefaults.standard.set(false, forKey: "autoStartEnabled")
+            showManualInstructions(enable: false)
         } else {
-            // Enable auto-start
-            if #available(macOS 13.0, *) {
-                try? SMAppService.mainApp.register()
-            } else {
-                UserDefaults.standard.set(true, forKey: "autoStartEnabled")
-                showManualInstructions(enable: true)
-            }
+            UserDefaults.standard.set(true, forKey: "autoStartEnabled")
+            showManualInstructions(enable: true)
         }
-        
+
         // Update the menu
         updateAutoStartMenuItem()
     }
-    
+
+    @available(macOS 13.0, *)
+    private func toggleLoginItem(_ service: SMAppService) {
+        var failure: Error?
+        do {
+            if service.status == .enabled {
+                try service.unregister()
+            } else {
+                try service.register()
+            }
+        } catch {
+            errorLog("❌ Login item update failed: \(error)")
+            failure = error
+        }
+
+        // macOS can hold a new login item until the user allows it, whether register() threw or not
+        if service.status == .requiresApproval {
+            let alert = NSAlert()
+            alert.messageText = "Allow NowPlaying to start at login"
+            alert.informativeText = "macOS needs your approval: turn NowPlaying on in System Settings > General > Login Items."
+            alert.addButton(withTitle: "Open System Settings")
+            alert.addButton(withTitle: "Cancel")
+            if showAlert(alert) == .alertFirstButtonReturn {
+                SMAppService.openSystemSettingsLoginItems()
+            }
+        } else if let failure = failure {
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = "Couldn't change Start at Login"
+            alert.informativeText = failure.localizedDescription
+            showAlert(alert)
+        }
+    }
+
+    /// Brings this menu bar app to the front first: an inactive app's alert can open behind other windows.
+    @discardableResult
+    private func showAlert(_ alert: NSAlert) -> NSApplication.ModalResponse {
+        if #available(macOS 14.0, *) {
+            NSApp.activate()
+        } else {
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        return alert.runModal()
+    }
+
     private func showManualInstructions(enable: Bool) {
         let alert = NSAlert()
         alert.alertStyle = .informational
@@ -158,7 +194,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         
         alert.addButton(withTitle: "OK")
-        alert.runModal()
+        showAlert(alert)
     }
     
     private func isAutoStartEnabled() -> Bool {        
