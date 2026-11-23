@@ -46,11 +46,45 @@ Click the menu bar item for the Start at Login and Quit options.
 
 ### Spectrum analyzer
 
-On macOS 26 and later, the ♫ symbol becomes a spectrum analyzer while Spotify plays. It captures Spotify's audio through Core Audio, so macOS asks once for permission to capture other apps' audio; nothing is recorded or stored. If the ♫ symbol stays while music plays, check that NowPlaying is allowed in System Settings > Privacy & Security > Screen & System Audio Recording: without that permission the capture only brings silence, and the symbol stands in for the spectrum.
+On macOS 26 and later, the ♫ symbol becomes a spectrum analyzer while Spotify plays. It captures Spotify's audio through Core Audio (see [How the spectrum works](#how-the-spectrum-works)), so macOS asks once for permission to capture other apps' audio; nothing is recorded or stored. If the ♫ symbol stays while music plays, check that NowPlaying is allowed in System Settings > Privacy & Security > Screen & System Audio Recording: without that permission the capture only brings silence, and the symbol stands in for the spectrum.
 
 The Spectrum Style menu switches between two looks: Winamp, green and yellow bars on a black tile, and macOS, bars in the menu bar's text color.
 
 Band count, frequency range, sensitivity and motion are set in `AppConfig.swift`.
+
+## How the spectrum works
+
+The spectrum shows Spotify's output only: sounds from other apps do not move it.
+
+### Capturing one app's audio
+
+Core Audio process taps capture the audio an app sends to the output. `SpotifyAudioTap.swift` sets one up in four steps:
+
+1. **Describe the tap**: `CATapDescription(monoMixdownOfProcesses: [])` with `bundleIDs = ["com.spotify.client"]`. Targeting a bundle ID is new in macOS 26. Taps exist since macOS 14.2, but there they take Core Audio process objects, which must first be looked up from the app's running process. The tap is private (`isPrivate`), so only NowPlaying sees it, and `muteBehavior = .unmuted`, so Spotify keeps playing through the speakers.
+2. **Create it** with `AudioHardwareCreateProcessTap`, and read its sample rate from `kAudioTapPropertyFormat`.
+3. **Wrap it in an aggregate device**: a tap delivers nothing on its own. It needs a private aggregate device that lists it under `kAudioAggregateDeviceTapListKey`, with `kAudioAggregateDeviceTapAutoStartKey` set.
+4. **Read the samples** with an IO block on that aggregate device (`AudioDeviceCreateIOProcIDWithBlock` on a queue of its own, then `AudioDeviceStart`). The block copies the samples into a ring buffer behind an `OSAllocatedUnfairLock`, and the main thread reads the latest 4096 from it.
+
+Notes:
+
+- **Permission**: the app needs `NSAudioCaptureUsageDescription` in its Info.plist, and macOS asks once, on the first capture. A denied permission is not an error: the tap is created and runs, but delivers only silence. NowPlaying therefore treats 3 seconds of pure silence after a start as no audio, and shows ♫ until the first sound (`AudioPresence` in `SpectrumController.swift`). A change of the permission in System Settings applies once the app relaunches, and macOS offers to quit and reopen it.
+- **Output changes**: the analyzer depends on the sample rate, which can change with the output device. NowPlaying listens to `kAudioHardwarePropertyDefaultOutputDevice` and to the tap's `kAudioTapPropertyFormat`, and rebuilds the tap, the aggregate device and the analyzer when either changes.
+- **Lifetime**: the tap only exists while Spotify plays and someone can see the menu bar. It is destroyed on pause, when Spotify quits, and while the displays sleep or the screen is locked.
+
+### From samples to bars
+
+`SpectrumAnalyzer.swift` applies a Hann window and a 4096-point FFT with vDSP: 4096 samples last about 85 ms at 48 kHz, enough resolution for the lowest bands. It then sums the power of 18 bands spaced logarithmically from 50 Hz to 16 kHz, and maps each from -60 to -10 dBFS to a height between 0 and 1. `SpectrumMeter.swift` adds the motion: bars rise at once and fall smoothly, and peak marks hold for 0.6 s before falling.
+
+### Drawing in the menu bar
+
+A status item button shows a title and an image, but replacing the image 30 times per second costs about 40% of a core on an M2 Max, although drawing the image itself takes under 1%. `SpectrumView.swift` draws with Core Animation layers instead:
+
+- the button gets a blank image of the spectrum's size, which keeps room before the title
+- a layer-hosting `NSView` sits over that image, with one `CALayer` per bar segment and peak mark
+- each frame only moves those layers, inside a `CATransaction` with actions disabled, so the button keeps its title and size and nothing else is laid out again
+- the view lets clicks through (`hitTest` returns nil), so the button still opens its menu
+
+The 30 fps timer runs in the run loop's common modes, so the spectrum keeps moving while the menu is open (`SpectrumController.swift`).
 
 ## Development
 
