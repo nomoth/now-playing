@@ -11,6 +11,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     /// The delayed start after Spotify launches. Cancelled if Spotify quits first, since nothing else
     /// would stop polling a Spotify that is gone.
     private var pendingMonitoringStart: DispatchWorkItem?
+    /// What Spotify plays, nil when there is nothing to show
+    private var spotifyState: (isPlaying: Bool, artist: String, track: String)?
     private let logger = Logger(subsystem: "com.jf.nowplaying", category: "AppDelegate")
 
     /// SpectrumController on macOS 26 and later. Typed AnyObject because a stored
@@ -38,6 +40,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         debugLog("🚀 AppDelegate: applicationDidFinishLaunching called")
         setupMenuBarApp()
         setupStatusItem()
+        observeMenuBarVisibility()
         setupSpotifyMonitor()
         debugLog("✅ AppDelegate: Setup complete")
     }
@@ -230,6 +233,73 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         stopSpectrum()
     }
 
+    // MARK: - Display
+
+    /// Shows `spotifyState` in the menu bar: while Spotify plays, the spectrum where it can run, otherwise a symbol.
+    private func updateButton() {
+        guard let button = statusItem.button else { return }
+        guard let state = spotifyState else {
+            stopSpectrum()
+            showText(AppConfig.defaultSymbol, on: button)
+            return
+        }
+
+        // Limit length to avoid menu bar overflow
+        let displayText = formatDisplayText(artist: state.artist, track: state.track)
+        if state.isPlaying && showSpectrum(title: " \(displayText)") {
+            return
+        }
+        stopSpectrum()
+        let icon = state.isPlaying ? AppConfig.playingSymbol : AppConfig.pausedSymbol
+        showText("\(icon) \(displayText)", on: button)
+    }
+
+    private func showText(_ text: String, on button: NSStatusBarButton) {
+        button.title = text
+        button.image = nil
+        button.imagePosition = .noImage
+    }
+
+    // MARK: - Menu bar visibility
+
+    /// Why nobody can see the menu bar. The spectrum stops while there is any, rather than
+    /// capture and draw for hours on a sleeping or locked Mac.
+    private enum HiddenReason {
+        case screensAsleep, screenLocked, sessionInactive
+    }
+
+    private var menuBarHiddenReasons: Set<HiddenReason> = []
+
+    // Undocumented, but no documented notification tells when the screen locks
+    private static let screenLockedNotification = Notification.Name("com.apple.screenIsLocked")
+    private static let screenUnlockedNotification = Notification.Name("com.apple.screenIsUnlocked")
+
+    private func observeMenuBarVisibility() {
+        let workspace = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.screensDidSleepNotification, NSWorkspace.screensDidWakeNotification,
+                     NSWorkspace.sessionDidResignActiveNotification, NSWorkspace.sessionDidBecomeActiveNotification] {
+            workspace.addObserver(self, selector: #selector(menuBarVisibilityChanged(_:)), name: name, object: nil)
+        }
+        for name in [Self.screenLockedNotification, Self.screenUnlockedNotification] {
+            DistributedNotificationCenter.default().addObserver(self, selector: #selector(menuBarVisibilityChanged(_:)),
+                                                                name: name, object: nil)
+        }
+    }
+
+    @objc private func menuBarVisibilityChanged(_ notification: Notification) {
+        switch notification.name {
+        case NSWorkspace.screensDidSleepNotification: menuBarHiddenReasons.insert(.screensAsleep)
+        case NSWorkspace.screensDidWakeNotification: menuBarHiddenReasons.remove(.screensAsleep)
+        case Self.screenLockedNotification: menuBarHiddenReasons.insert(.screenLocked)
+        case Self.screenUnlockedNotification: menuBarHiddenReasons.remove(.screenLocked)
+        case NSWorkspace.sessionDidResignActiveNotification: menuBarHiddenReasons.insert(.sessionInactive)
+        case NSWorkspace.sessionDidBecomeActiveNotification: menuBarHiddenReasons.remove(.sessionInactive)
+        default: return
+        }
+        debugLog("🖥️ \(notification.name.rawValue), menu bar hidden by: \(menuBarHiddenReasons)")
+        updateButton()
+    }
+
     // MARK: - Spectrum
 
     private var spectrumTheme: SpectrumTheme {
@@ -266,10 +336,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Shows the running spectrum in place of the playing symbol, before `title`.
-    /// Returns false where it cannot run, so the caller falls back to the playing symbol.
+    /// Shows the running spectrum in place of the playing symbol, before `title`. Returns false where
+    /// it cannot run or while nobody can see the menu bar, so the caller falls back to the playing symbol.
     private func showSpectrum(title: String) -> Bool {
-        guard #available(macOS 26.0, *), let button = statusItem.button else { return false }
+        guard #available(macOS 26.0, *), menuBarHiddenReasons.isEmpty, let button = statusItem.button else {
+            return false
+        }
         let controller: SpectrumController
         if let existing = spectrumController as? SpectrumController {
             controller = existing
@@ -329,39 +401,20 @@ extension AppDelegate: NSMenuDelegate {
 extension AppDelegate: SpotifyMonitorDelegate {
     func spotifyStateChanged(isPlaying: Bool, artist: String?, track: String?) {
         DispatchQueue.main.async { [weak self] in
-            guard let self = self, let button = self.statusItem.button else { return }
-            
+            guard let self = self else { return }
             if let artist = artist, let track = track, !artist.isEmpty, !track.isEmpty {
-                // Limit length to avoid menu bar overflow
-                let displayText = self.formatDisplayText(artist: artist, track: track)
-                
-                if isPlaying && self.showSpectrum(title: " \(displayText)") {
-                    return
-                }
-
-                // Create text with integrated icon
-                self.stopSpectrum()
-                let icon = isPlaying ? AppConfig.playingSymbol : AppConfig.pausedSymbol
-                button.title = "\(icon) \(displayText)"
-                button.image = nil
-                button.imagePosition = .noImage
+                self.spotifyState = (isPlaying, artist, track)
             } else {
-                self.stopSpectrum()
-                button.title = AppConfig.defaultSymbol
-                button.image = nil
-                button.imagePosition = .noImage
+                self.spotifyState = nil
             }
+            self.updateButton()
         }
     }
 
     func spotifyNotRunning() {
         DispatchQueue.main.async { [weak self] in
-            guard let self = self, let button = self.statusItem.button else { return }
-
-            self.stopSpectrum()
-            button.title = AppConfig.defaultSymbol
-            button.image = nil
-            button.imagePosition = .noImage
+            self?.spotifyState = nil
+            self?.updateButton()
         }
     }
     
