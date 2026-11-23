@@ -80,10 +80,13 @@ class SpotifyMonitor {
         pollingTimer?.invalidate() // Cleanup existing timer
         currentPollingInterval = interval
         // No check that Spotify runs here: monitoring only runs while it does (see AppDelegate),
-        // and the script answers "not_running" on its own if it quit in between
-        pollingTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+        // and the script answers "not_running" on its own if it quit in between.
+        // Common modes keep polling while the menu is open, or the title would freeze next to a live spectrum.
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             self?.updateSpotifyState()
         }
+        RunLoop.main.add(timer, forMode: .common)
+        pollingTimer = timer
         debugLog("⏰ Polling timer set up with \(interval)s interval")
     }
     
