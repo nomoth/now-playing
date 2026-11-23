@@ -48,6 +48,8 @@ Click the menu bar item for the Start at Login and Quit options.
 
 On macOS 26 and later, the ♫ symbol becomes a spectrum analyzer while Spotify plays. It captures Spotify's audio through Core Audio, so macOS asks once for permission to capture other apps' audio; nothing is recorded or stored. If the bars stay flat while music plays, check that NowPlaying is allowed in System Settings > Privacy & Security > Screen & System Audio Recording.
 
+The Spectrum Style menu switches between two looks: Winamp, green and yellow bars on a black tile, and macOS, bars in the menu bar's text color.
+
 Band count, frequency range, sensitivity and motion are set in `AppConfig.swift`.
 
 ## Development

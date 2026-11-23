@@ -25,6 +25,9 @@ final class SpectrumController {
         stop()
     }
 
+    /// Applies from the next frame
+    var theme: SpectrumTheme = .winamp
+
     var isRunning: Bool { timer != nil }
 
     func start() throws {
@@ -55,7 +58,7 @@ final class SpectrumController {
         guard let analyzer = analyzer else { return }
         tap.copyLatest(into: &samples)
         meter.update(levels: analyzer.levels(of: samples), at: ProcessInfo.processInfo.systemUptime)
-        onFrame(SpectrumRenderer.image(of: meter, height: NSStatusBar.system.thickness - 4))
+        onFrame(SpectrumRenderer.image(of: meter, height: NSStatusBar.system.thickness - 4, theme: theme))
         reportActivityEverySecond()
     }
 

@@ -63,7 +63,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let autoStartItem = NSMenuItem(title: "Start at Login", action: #selector(toggleAutoStart), keyEquivalent: "")
         autoStartItem.state = isAutoStartEnabled() ? .on : .off
         menu.addItem(autoStartItem)
-        
+
+        // The spectrum only runs on macOS 26 and later
+        if #available(macOS 26.0, *) {
+            menu.addItem(spectrumThemeMenuItem())
+        }
+
         menu.addItem(NSMenuItem.separator())
         menu.addItem(NSMenuItem(title: "Quit NowPlaying", action: #selector(quit), keyEquivalent: "q"))
         
@@ -219,6 +224,40 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Spectrum
 
+    private var spectrumTheme: SpectrumTheme {
+        get {
+            UserDefaults.standard.string(forKey: AppConfig.spectrumThemeKey).flatMap(SpectrumTheme.init(rawValue:)) ?? .winamp
+        }
+        set {
+            UserDefaults.standard.set(newValue.rawValue, forKey: AppConfig.spectrumThemeKey)
+        }
+    }
+
+    private func spectrumThemeMenuItem() -> NSMenuItem {
+        let themes = NSMenu()
+        for theme in SpectrumTheme.allCases {
+            let item = NSMenuItem(title: theme.title, action: #selector(selectSpectrumTheme(_:)), keyEquivalent: "")
+            item.representedObject = theme.rawValue
+            item.state = theme == spectrumTheme ? .on : .off
+            themes.addItem(item)
+        }
+        let item = NSMenuItem(title: "Spectrum Style", action: nil, keyEquivalent: "")
+        item.submenu = themes
+        return item
+    }
+
+    @objc private func selectSpectrumTheme(_ sender: NSMenuItem) {
+        guard let rawValue = sender.representedObject as? String,
+              let theme = SpectrumTheme(rawValue: rawValue) else { return }
+        spectrumTheme = theme
+        for item in sender.menu?.items ?? [] {
+            item.state = item === sender ? .on : .off
+        }
+        if #available(macOS 26.0, *), let controller = spectrumController as? SpectrumController {
+            controller.theme = theme
+        }
+    }
+
     /// Starts the spectrum, which then sets the button image on every frame.
     /// Returns false where it cannot run, so the caller falls back to the playing symbol.
     private func startSpectrum() -> Bool {
@@ -232,6 +271,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
             spectrumController = controller
         }
+        controller.theme = spectrumTheme
         do {
             try controller.start()
             return true

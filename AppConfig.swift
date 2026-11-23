@@ -42,6 +42,9 @@ struct AppConfig {
 
     // MARK: - Spectrum Analyzer (macOS 26+, replaces the playing symbol)
 
+    /// UserDefaults key of the chosen SpectrumTheme
+    static let spectrumThemeKey = "spectrumTheme"
+
     /// Number of bars
     static let spectrumBandCount = 18
 
