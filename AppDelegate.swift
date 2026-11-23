@@ -6,6 +6,9 @@ import os
 class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var spotifyMonitor: SpotifyMonitor!
+    /// The delayed start after Spotify launches. Cancelled if Spotify quits first, since nothing else
+    /// would stop polling a Spotify that is gone.
+    private var pendingMonitoringStart: DispatchWorkItem?
     private let logger = Logger(subsystem: "com.jf.nowplaying", category: "AppDelegate")
 
     /// SpectrumController on macOS 26 and later. Typed AnyObject because a stored
@@ -81,8 +84,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupSpotifyMonitor() {
         spotifyMonitor = SpotifyMonitor()
         spotifyMonitor.delegate = self
-        spotifyMonitor.startMonitoring()
+
+        // Monitoring follows Spotify: the launch and quit notifications start and stop it, so it only
+        // starts here if Spotify already runs. Observing first leaves no gap for a launch to slip through.
         setupSpotifyAppMonitoring()
+        if !NSRunningApplication.runningApplications(withBundleIdentifier: AppConfig.spotifyBundleID).isEmpty {
+            spotifyMonitor.startMonitoring()
+        }
     }
     
     private func setupSpotifyAppMonitoring() {
@@ -110,9 +118,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
            app.bundleIdentifier == AppConfig.spotifyBundleID {
             debugLog("🚀 Spotify launched - resuming monitoring")
             // Small delay to let Spotify initialize
-            DispatchQueue.main.asyncAfter(deadline: .now() + AppConfig.spotifyInitDelay) { [weak self] in
+            pendingMonitoringStart?.cancel()
+            let start = DispatchWorkItem { [weak self] in
+                self?.pendingMonitoringStart = nil
                 self?.spotifyMonitor?.startMonitoring()
             }
+            pendingMonitoringStart = start
+            DispatchQueue.main.asyncAfter(deadline: .now() + AppConfig.spotifyInitDelay, execute: start)
         }
     }
     
@@ -120,6 +132,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
            app.bundleIdentifier == AppConfig.spotifyBundleID {
             debugLog("🚨 Spotify terminated - stopping monitoring")
+            pendingMonitoringStart?.cancel()
+            pendingMonitoringStart = nil
             spotifyMonitor?.stopMonitoring()
             spotifyNotRunning()
         }

@@ -72,11 +72,6 @@ class SpotifyMonitor {
         lastPlayingPosition = nil
     }
     
-    private func isSpotifyRunning() -> Bool {
-        return NSWorkspace.shared.runningApplications
-            .contains { $0.bundleIdentifier == AppConfig.spotifyBundleID }
-    }
-    
     private func setupPollingTimer() {
         setupPollingTimer(interval: currentPollingInterval)
     }
@@ -84,13 +79,10 @@ class SpotifyMonitor {
     private func setupPollingTimer(interval: TimeInterval) {
         pollingTimer?.invalidate() // Cleanup existing timer
         currentPollingInterval = interval
+        // No check that Spotify runs here: monitoring only runs while it does (see AppDelegate),
+        // and the script answers "not_running" on its own if it quit in between
         pollingTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
-            guard let self = self else { return }
-            if self.isSpotifyRunning() {
-                self.updateSpotifyState()
-            } else {
-                self.handleSpotifyNotRunning()
-            }
+            self?.updateSpotifyState()
         }
         debugLog("⏰ Polling timer set up with \(interval)s interval")
     }
